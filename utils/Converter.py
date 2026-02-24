@@ -117,6 +117,7 @@ class Create(object):
         通过计算权重转换为一个(x:9)的类型
         """
         txt = txt.replace("，", ",")
+        txt = txt.replace("｛", "{").replace("｝", "}")
         # 切片
         _deal_after = self.__mn(text=txt)
         _result = ""
@@ -129,16 +130,10 @@ class Create(object):
         通过判断类型，取出权重或转换括号数量，转换为 {{{sex}}}
         """
         txt = txt.replace("，", ",")
+        txt = txt.replace("（", "(").replace("）", ")")
         _deal_after = self.__nm(text=txt)
         _result = ""
         for b in [_deal_after[i:i + 5] for i in range(0, len(_deal_after), 5)]:
             _result += ",".join(b) + ",\n"
         return _result
 
-    def n2_m(self, txt: str):
-        txt = txt.replace('（', '(').replace('）', ')')
-        _deal_after = self.__nm(text=txt)
-        _result = ""
-        for b in [_deal_after[i:i + 5] for i in range(0, len(_deal_after), 5)]:
-            _result += ",".join(b) + "\n"
-        return _result
