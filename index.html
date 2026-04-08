@@ -667,12 +667,20 @@
         </div>
       </div>
       <div class="opt-group">
+        <span class="opt-label">SD 权重</span>
+        <div class="fmt-toggle" id="sdFmtToggle" onclick="toggleSDFmt()" title="切换 SD 权重形式">
+          <span class="fmt-opt" id="sdFmtNum" data-active="true">(t:1.16)</span>
+          <span class="fmt-sep">/</span>
+          <span class="fmt-opt" id="sdFmtBracket">((t))</span>
+        </div>
+      </div>
+      <div class="opt-group">
         <span class="opt-label">中文括号</span>
         <label class="toggle-switch">
           <input type="checkbox" id="cnBracket">
           <span class="toggle-track"></span>
         </label>
-        <span class="opt-hint" id="cnHint">（）→ {}</span>
+        <span class="opt-hint">（）→ ()</span>
       </div>
     </div>
 
@@ -958,19 +966,24 @@ function formatOutput(items) {
 
 // ===== CONVERTERS =====
 
-/** NAI old {} / [] → SD (text:weight) */
-function mnConvert(txt) {
+/** NAI old {} / [] → SD, respecting sdFormat ('num' or 'bracket') */
+function mnConvert(txt, useBracket) {
   const items = splitByComma(txt);
   const out = [];
   for (const item of items) {
     if (!item) continue;
-    // Check if it has brackets
     if (/^[\[{]/.test(item) || /[\]}]$/.test(item)) {
       const tokens = parseNAIBrackets(item);
       for (const { text, weight } of tokens) {
         if (!text) continue;
         if (Math.abs(weight - 1.0) < 0.001) {
           out.push(text);
+        } else if (useBracket) {
+          // Convert weight to SD bracket nesting (base 1.1 per layer)
+          const n = Math.round(Math.log(weight) / Math.log(SD_ROUND_MULT));
+          if (n > 0)      out.push(repeat('(', n) + text + repeat(')', n));
+          else if (n < 0) out.push(repeat('[', -n) + text + repeat(']', -n));
+          else            out.push(text);
         } else {
           out.push(`(${text}:${fmtWeight(weight)})`);
         }
@@ -1020,20 +1033,25 @@ function sdToNaiV4(txt) {
   return formatOutput(out);
 }
 
-/** NAI v4 (weight::text::) → SD (text:weight) */
-function naiV4ToSD(txt) {
+/** NAI v4 (weight::text::) → SD */
+function naiV4ToSD(txt, useBracket) {
   const items = splitByComma(txt);
   const out = [];
   for (const item of items) {
     if (!item) continue;
-    // Match: weight::text:: or weight::text (optional trailing ::)
     const m = item.match(/^(-?[\d.]+)::([\s\S]+?)(?:::)?$/);
     if (m) {
       const weight = parseFloat(m[1]);
       const text = m[2].replace(/_/g, ' ');
-      out.push(`(${text}:${fmtWeight(weight)})`);
+      if (useBracket) {
+        const n = Math.round(Math.log(weight) / Math.log(SD_ROUND_MULT));
+        if (n > 0)      out.push(repeat('(', n) + text + repeat(')', n));
+        else if (n < 0) out.push(repeat('[', -n) + text + repeat(']', -n));
+        else            out.push(text);
+      } else {
+        out.push(`(${text}:${fmtWeight(weight)})`);
+      }
     } else {
-      // Plain text: strip trailing :: if any
       out.push(item.replace(/::$/, '').replace(/_/g, ' '));
     }
   }
@@ -1053,6 +1071,8 @@ function n2mConvert(txt) {
 let direction = 'n2s';
 // naiFormat: 'classic' ({}) or 'v4' (weight::)
 let naiFormat = 'classic';
+// sdFormat: 'num' (text:1.16) or 'bracket' (((text)))
+let sdFormat = 'num';
 
 window.addEventListener('DOMContentLoaded', () => {
   updateDirLabel();
@@ -1092,11 +1112,20 @@ function updateDirLabel() {
 function toggleFmt() {
   naiFormat = naiFormat === 'classic' ? 'v4' : 'classic';
   document.getElementById('fmtClassic').dataset.active = naiFormat === 'classic' ? 'true' : 'false';
-  document.getElementById('fmtV4').dataset.active     = naiFormat === 'v4'      ? 'true' : 'false';
-  // Update placeholder
+  document.getElementById('fmtV4').dataset.active      = naiFormat === 'v4'      ? 'true' : 'false';
   document.getElementById('naiInput').placeholder = naiFormat === 'classic'
     ? '在此输入 NAI 格式 Prompt…\n\n例: {{{blue eyes}}}, {{silver hair}},\n[ugly]'
     : '在此输入 NAI v4 格式 Prompt…\n\n例: 1.3::long_hair::, smile,\n0.8::blue_eyes::';
+  const src = direction === 'n2s'
+    ? document.getElementById('naiInput').value
+    : document.getElementById('sdInput').value;
+  if (src.trim()) doConvert();
+}
+
+function toggleSDFmt() {
+  sdFormat = sdFormat === 'num' ? 'bracket' : 'num';
+  document.getElementById('sdFmtNum').dataset.active     = sdFormat === 'num'     ? 'true' : 'false';
+  document.getElementById('sdFmtBracket').dataset.active = sdFormat === 'bracket' ? 'true' : 'false';
   const src = direction === 'n2s'
     ? document.getElementById('naiInput').value
     : document.getElementById('sdInput').value;
@@ -1134,9 +1163,10 @@ function doConvert() {
       let inp = srcEl.value;
       let result = '';
 
+      const useBracket = sdFormat === 'bracket';
       if (direction === 'n2s') {
         // NAI → SD
-        result = naiFormat === 'v4' ? naiV4ToSD(inp) : mnConvert(inp);
+        result = naiFormat === 'v4' ? naiV4ToSD(inp, useBracket) : mnConvert(inp, useBracket);
       } else {
         // SD → NAI
         if (useCN) inp = n2mConvert(inp); // Chinese brackets first
