@@ -39,9 +39,7 @@ git clone https://github.com/StingGrey/sd-nai-transform.git
 | `((text))` | ×1.21 |
 | `(text:1.2)` | ×1.2 |
 
-## 致谢
 
-灵感与权重规则参考自 [sudoskys/sd-nai-](https://github.com/sudoskys/sd-nai-)。
 
 ## License
 
